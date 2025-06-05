@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>University Chat Assistant - Test Interface</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    h1, h2 {
+      color: #333;
+    }
+    .container {
+      margin-bottom: 40px;
+      border: 1px solid #ccc;
+      padding: 20px;
+      border-radius: 8px;
+    }
+    textarea {
+      width: 100%;
+      height: 80px;
+    }
+    input[type="text"], input[type="file"] {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      cursor: pointer;
+    }
+    .output {
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin-top: 10px;
+      background: #f9f9f9;
+      white-space: pre-wrap;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+  </style>
+
+  <!-- Load React/ReactDOM first -->
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+
+  <!-- Then load ReactFlow UMD -->
+  <script src="https://unpkg.com/reactflow/dist/reactflow.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/reactflow/dist/style.css">
+</head>
+<body>
+  <h1>University Chat Assistant Test Interface</h1>
+
+  <!-- Chat Section -->
+  <div class="container" id="chat-section">
+    <h2>Chat</h2>
+    <label for="role-select">Select Role:</label>
+    <select id="role-select">
+      <option value="teacher">Teacher</option>
+      <option value="student">Student</option>
+    </select>
+    <br /><br />
+    <label for="session-id">Session ID (optional):</label>
+    <input type="text" id="session-id" placeholder="default">
+    <br /><br />
+    <label for="chat-query">Enter your query:</label>
+    <textarea id="chat-query"></textarea>
+    <button onclick="sendChat()">Send Query</button>
+    <div class="output" id="chat-output"></div>
+    <br />
+    <button onclick="clearChat()">Clear Chat History</button>
+    <button onclick="loadChatHistory()">Load Chat History</button>
+  </div>
+
+<!-- Flowchart Section -->
+<div class="container" id="flowchart-section">
+  <h2>Flowchart Generator (Teacher)</h2>
+  <label for="flowchart-query">Введите запрос для создания схемы:</label><br/>
+  <textarea id="flowchart-query" rows="4" style="width:100%;"></textarea><br/>
+  <button onclick="generateFlowchart()">Создать схему</button>
+
+  <!-- Show raw Mermaid (optional) -->
+  <div class="output" id="flowchart-output"
+       style="white-space: pre-wrap; margin-top:10px;"></div>
+
+  <!-- Rendered diagram -->
+  <div id="flowchart-visual"
+       style="width:100%; height:500px; border:1px solid #ccc; margin-top:20px;"></div>
+</div>
+
+<!-- Include Mermaid.js once in <head> or before this script -->
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+<script>
+  const baseURL = "http://localhost:8000";
+
+  async function generateFlowchart() {
+    // clear old
+    document.getElementById("flowchart-output").textContent = "";
+    document.getElementById("flowchart-visual").innerHTML = "";
+
+    const query = document.getElementById("flowchart-query").value;
+    const res = await fetch(baseURL + "/api/teacher/flowchart", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query })
+    });
+
+    if (!res.ok) {
+      document.getElementById("flowchart-output")
+              .textContent = `Ошибка ${res.status}: ${res.statusText}`;
+      return;
+    }
+
+    // parse JSON envelope
+    const { mermaid, sources } = await res.json();
+
+    // display raw Mermaid if you like
+    document.getElementById("flowchart-output").textContent = mermaid;
+
+    // render the diagram
+    mermaid.initialize({ startOnLoad: false });
+    mermaid.render("mermaidDiagram", mermaid, svgCode => {
+      document.getElementById("flowchart-visual").innerHTML = svgCode;
+    });
+
+    // list sources under the diagram
+    if (sources.length) {
+      const srcDiv = document.getElementById("flowchart-output");
+      srcDiv.insertAdjacentHTML(
+        "beforeend",
+        "\n\n<b>Источники:</b>\n" +
+          sources.map(s => `• ${s}`).join("\n")
+      );
+    }
+  }
+</script>
+
+
+
+
+  <!-- Documents Section -->
+  <div class="container" id="docs-section">
+    <h2>Documents</h2>
+    <label for="docs-role-select">Select Role:</label>
+    <select id="docs-role-select">
+      <option value="teacher">Teacher</option>
+      <option value="student">Student</option>
+    </select>
+    <button onclick="listDocs()">List Documents</button>
+    <div class="output" id="docs-output"></div>
+    <hr>
+    <h3>Upload a document</h3>
+    <label>Role:</label>
+    <select id="upload-role">
+      <option value="teacher">Teacher</option>
+      <option value="student">Student</option>
+    </select><br/><br/>
+    
+    <input type="file" id="upload-file"><br/><br/>
+    
+    <button id="btn-check">Check Similarity</button>
+    <button id="btn-upload" style="display:none">Upload & Rebuild</button>
+    <button id="btn-replace" style="display:none">Replace & Rebuild</button>
+    
+    <div class="output" id="upload-output"></div>
+    
+
+  <!-- Endpoints List Section -->
+  <div class="container" id="endpoints-section">
+    <h2>Available Endpoints</h2>
+    <button onclick="listEndpoints()">List Endpoints</button>
+    <div class="output" id="endpoints-output"></div>
+  </div>
+
+  <!-- Another script for the rest of your code, if you want -->
+  <script>
+    // Chat-related code
+    async function sendChat() {
+      const role = document.getElementById("role-select").value;
+      const sessionId = document.getElementById("session-id").value || "default";
+      const query = document.getElementById("chat-query").value;
+      const endpoint = role === "teacher" ? "/api/teacher/chat" : "/api/student/chat";
+
+      const response = await fetch(baseURL + endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ query: query, session_id: sessionId })
+      });
+      const data = await response.json();
+      document.getElementById("chat-output").textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function clearChat() {
+      const role = document.getElementById("role-select").value;
+      const sessionId = document.getElementById("session-id").value || "default";
+      const endpoint = `/api/${role}/chat/clear?session_id=${sessionId}`;
+      const response = await fetch(baseURL + endpoint, { method: "POST" });
+      const data = await response.json();
+      alert(data.message);
+      document.getElementById("chat-output").textContent = "";
+    }
+
+    // Fetch and display the full conversation for a session_id
+    async function loadChatHistory() {
+      const role      = document.getElementById("role-select").value;
+      const sessionId = document.getElementById("session-id").value || "default";
+      const endpoint  = `${baseURL}/api/${role}/chat/history?session_id=${sessionId}`;
+      const resp      = await fetch(endpoint);
+      if (!resp.ok) {
+        alert("Failed to load history");
+        return;
+      }
+      const data = await resp.json();
+
+      // table
+      const table = document.createElement("table");
+      table.style.width = "100%";
+      table.border = "1";
+  
+      table.innerHTML = `
+        <tr>
+          <th>ID</th>
+          <th>Time</th>
+          <th>Role</th>
+          <th>Message</th>
+          <th>Action</th>
+        </tr>
+        ${data.history.map(item => `
+          <tr>
+            <td>${item.id}</td>
+            <td>${item.time || ''}</td>
+            <td>${item.role}</td>
+            <td>${item.content.replace(/</g, "&lt;")}</td>
+            <td>
+              <button onclick="deleteMessage('${role}','${sessionId}',${item.id})">
+                Delete
+              </button>
+            </td>
+          </tr>
+        `).join("")}
+      `;
+
+      const output = document.getElementById("chat-output");
+      output.innerHTML = "";       
+      output.appendChild(table);   
+    }
+
+    async function deleteMessage(role, sessionId, messageId) {
+      const endpoint = `${baseURL}/api/${role}/chat/history`
+        + `?session_id=${sessionId}&message_id=${messageId}`;
+      const resp = await fetch(endpoint, { method: "DELETE" });
+      if (resp.ok) {
+        // reload 
+        loadChatHistory();
+      } else {
+        const err = await resp.json();
+        alert("Delete failed: " + (err.detail || err.message));
+      }
+    }
+
+
+
+
+
+
+
+
+
+    async function listDocs() {
+      const role = document.getElementById("docs-role-select").value;
+      const endpoint = role === "teacher" ? "/api/teacher/docs" : "/api/student/docs";
+      const response = await fetch(baseURL + endpoint);
+      const data = await response.json();
+      document.getElementById("docs-output").textContent = JSON.stringify(data, null, 2);
+    }
+
+
+
+    const checkBtn   = document.getElementById("btn-check");
+    const uploadBtn  = document.getElementById("btn-upload");
+    const replaceBtn = document.getElementById("btn-replace");
+    const outDiv     = document.getElementById("upload-output");
+
+    let lastFile = null, lastRole = null, candidates = [];
+
+    checkBtn.onclick = async () => {
+      outDiv.textContent = "Checking…";
+      lastFile = document.getElementById("upload-file").files[0];
+      lastRole = document.getElementById("upload-role").value;
+      if (!lastFile) return outDiv.textContent="Select a file first";
+
+      const fd = new FormData();
+      fd.append("file", lastFile);
+      const resp = await fetch(`${baseURL}/api/${lastRole}/docs/check_similarity`,
+                              { method:"POST", body:fd });
+      const {possible_duplicates} = await resp.json();
+
+      if (possible_duplicates.length) {
+        candidates = possible_duplicates;
+        outDiv.innerHTML =
+          `<b>Possible duplicates:</b><br>` +
+          possible_duplicates.map(d =>
+            `• ${d.file} ( ${d.similarity}% )`
+          ).join("<br>") +
+          `<br><br>`;
+        replaceBtn.style.display = "inline-block";
+      } else {
+        outDiv.textContent = "No duplicates found. Ready to upload.";
+      }
+
+      uploadBtn.style.display = "inline-block";
+    };
+
+    uploadBtn.onclick = () => {
+      doUpload(/* no replace */);
+    };
+
+    replaceBtn.onclick = () => {
+      // if there are multiple, you could let user pick one.
+      // for simplicity take the first:
+      doUpload(candidates[0].file);
+    };
+
+    async function doUpload(replaceId) {
+      outDiv.textContent = "Uploading & rebuilding index…";
+      const fd = new FormData();
+      fd.append("file", lastFile);
+      if (replaceId) fd.append("replace_doc_id", replaceId);
+
+      const ep = lastRole==="teacher" ? "/api/teacher/docs/upload"
+                                      : "/api/student/docs/upload";
+
+      const resp = await fetch(baseURL + ep, { method:"POST", body:fd });
+      const data = await resp.json();
+      outDiv.textContent = `${data.file_action || ""}\n${data.message}`;
+      // hide buttons again
+      uploadBtn.style.display = replaceBtn.style.display = "none";
+    }
+
+
+
+
+
+
+
+    
+
+
+
+
+    document.getElementById("refresh-btn").addEventListener("click", async () => {
+    const role = document.getElementById("refresh-role").value;
+    const ep   = role === "teacher" ? "/refresh/staff" : "/refresh/students";
+    const file = document.getElementById("refresh-file");
+    const rid  = document.getElementById("replace-doc-id").value;
+
+    if (!file.files.length) return alert("Select a file first.");
+
+    const form = new FormData();
+    form.append("file", file.files[0]);
+    if (rid) form.append("replace_doc_id", rid);
+
+    document.getElementById("refresh-output").textContent = "Processing…";
+    try {
+      const res = await fetch(baseURL + ep, { method: "POST", body: form });
+      const data = await res.json();
+      document.getElementById("refresh-output").textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+      document.getElementById("refresh-output").textContent = "Error: " + e;
+    }
+    });
+
+    document.getElementById("check-similarity-btn").addEventListener("click", async () => {
+      const role = document.getElementById("upload-role-select").value;
+      const endpoint = role === "teacher"
+        ? "/api/teacher/docs/check_similarity"
+        : "/api/student/docs/check_similarity";
+      const fileInput = document.getElementById("upload-file");
+      if (!fileInput.files.length) {
+        document.getElementById("similarity-output").textContent =
+          "Please select a file first.";
+        return;
+      }
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+      const response = await fetch(baseURL + endpoint, {
+        method: "POST",
+        body: formData
+      });
+      const data = await response.json();
+      if (data.possible_duplicates && data.possible_duplicates.length > 0) {
+        document.getElementById("similarity-output").innerHTML =
+          `<b>Possible duplicates found:</b><br>` +
+          data.possible_duplicates
+              .map(d => `File: <b>${d.file}</b>, Similarity: <b>${d.similarity}%</b>`)
+              .join("<br>");
+      } else {
+        document.getElementById("similarity-output").textContent =
+          "No similar documents found.";
+      }
+    });
+
+
+    document.getElementById("refresh-staff-btn").addEventListener("click", async () => {
+      document.getElementById("refresh-staff-output").textContent = "Refreshing...";
+      try {
+        const response = await fetch(baseURL + "/refresh/staff", { method: "POST" });
+        const data = await response.json();
+        document.getElementById("refresh-staff-output").textContent = data.message || JSON.stringify(data);
+      } catch (err) {
+        document.getElementById("refresh-staff-output").textContent = "Error refreshing index.";
+      }
+    });
+
+    async function listEndpoints() {
+      const response = await fetch(baseURL + "/api/endpoints");
+      const data = await response.json();
+      document.getElementById("endpoints-output").textContent = JSON.stringify(data, null, 2);
+    }
+  </script>
+</body>
+</html>

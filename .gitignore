@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+# Local data & indexes
+data/
+#data_stud/
+indexes/
+#indexes_stud/
+temp/
+legal_data/
+legal_indexes/
+debug_stamps/
